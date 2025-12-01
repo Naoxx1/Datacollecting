@@ -7,7 +7,6 @@ const https = require("https") as typeof import("https");
 
 const BASE_PATH = "C:\\DiscordServerDumps";
 
-// Catégories disponibles
 const CATEGORIES = {
     IMAGES: "Images",
     VIDEOS: "Videos",
@@ -45,9 +44,7 @@ function getDateFolder(): string {
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
 }
 
-// Détection locale des catégories (pour les cas évidents)
 function detectCategoryLocal(content: string, attachments: string[]): string | null {
-    // Vérifier les attachements d'abord
     const imageExtensions = [".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".svg"];
     const videoExtensions = [".mp4", ".webm", ".mov", ".avi", ".mkv", ".flv", ".wmv"];
     const fileExtensions = [".pdf", ".doc", ".docx", ".xls", ".xlsx", ".zip", ".rar", ".txt", ".json"];
@@ -65,13 +62,11 @@ function detectCategoryLocal(content: string, attachments: string[]): string | n
         }
     }
 
-    // Vérifier si c'est une commande
     const commandPrefixes = ["/", "!", "?", ".", "-", "$", "%", "&", ">", "<"];
     if (content && commandPrefixes.some(prefix => content.trim().startsWith(prefix))) {
         return CATEGORIES.COMMANDES;
     }
 
-    // Vérifier si contient des liens
     const urlRegex = /(https?:\/\/[^\s]+)/gi;
     if (content && urlRegex.test(content)) {
         const urls = content.match(urlRegex) || [];
@@ -87,7 +82,6 @@ function detectCategoryLocal(content: string, attachments: string[]): string | n
         return CATEGORIES.LIENS;
     }
 
-    // Détection d'infos personnelles
     const personalInfoPatterns = [
         /\b(mon|my|email|mail|contact|adresse)\s*:?\s*[\w.-]+@[\w.-]+\.\w+\b/i,
         /\b(tel|phone|telephone|numero|number|appel|call|contact)\s*:?\s*[\d\s.+-]{10,}/i,
@@ -106,7 +100,6 @@ function detectCategoryLocal(content: string, attachments: string[]): string | n
         }
     }
 
-    // Détection de contenu inapproprié
     const inappropriatePatterns = [
         /\b(tu es?|you'?re|t'es|toi|you)\s+(un\s+)?(connard|connasse|salope|pute|pd|pédé|gogol|débile|crétin|abruti|bitch|asshole|retard|faggot|cunt|whore|slut)\b/i,
         /\b(nique\s+(ta|sa|leur)|ntm|fdp|fils de pute|ta gueule|ferme ta gueule|va te faire|casse toi)\b/i,
@@ -128,7 +121,6 @@ function detectCategoryLocal(content: string, attachments: string[]): string | n
     return null;
 }
 
-// Classification par IA via Pollinations
 function classifyWithAI(content: string): Promise<string> {
     return new Promise((resolve) => {
         if (!content || content.trim().length < 3) {
@@ -136,27 +128,27 @@ function classifyWithAI(content: string): Promise<string> {
             return;
         }
 
-        const prompt = `Tu es un classificateur de messages Discord. Analyse le CONTEXTE et l'INTENTION.
+        const prompt = `You are a Discord message classifier. Analyze the CONTEXT and INTENTION.
 
-RÈGLES IMPORTANTES:
-- Les expressions familières (holy shit, damn, wtf) = CONVERSATIONS, pas inapproprié
-- Les prix de jeux vidéo, stocks de shop, messages de bots (Mudae, etc.) = COMMANDES, PAS infos personnelles
-- Les pseudos Discord, noms de personnages de jeux = PAS des infos personnelles
-- INFOS_PERSONNELLES = UNIQUEMENT si quelqu'un partage SES VRAIES infos: son email perso, son vrai numéro, son adresse, sa date de naissance, son mot de passe
+IMPORTANT RULES:
+- Casual expressions (holy shit, damn, wtf) = CONVERSATIONS, not inappropriate
+- Video game prices, shop stocks, bot messages (Mudae, etc.) = COMMANDES, NOT personal info
+- Discord usernames, game character names = NOT personal info
+- INFOS_PERSONNELLES = ONLY if someone shares THEIR REAL info: personal email, real phone number, address, date of birth, password
 
-Catégories:
-- IMAGES: parle d'images, photos, screenshots
-- VIDEOS: parle de vidéos, clips, streams  
-- COMMANDES: messages de bots, commandes, réponses de bots, stock de shop de jeux, résultats de rolls
-- INFOS_PERSONNELLES: UNIQUEMENT vraies infos personnelles partagées volontairement (email, téléphone, adresse, mdp)
-- INAPPROPRIE: insulte DIRECTE, harcèlement, menaces, contenu sexuel explicite, propos racistes
-- LIENS: contient ou parle de liens/URLs
-- FICHIERS: parle de fichiers, documents
-- CONVERSATIONS: discussions normales, tout le reste
+Categories:
+- IMAGES: talks about images, photos, screenshots
+- VIDEOS: talks about videos, clips, streams  
+- COMMANDES: bot messages, commands, bot responses, game shop stock, roll results
+- INFOS_PERSONNELLES: ONLY real personal info shared voluntarily (email, phone, address, password)
+- INAPPROPRIE: DIRECT insult, harassment, threats, explicit sexual content, racist remarks
+- LIENS: contains or talks about links/URLs
+- FICHIERS: talks about files, documents
+- CONVERSATIONS: normal discussions, everything else
 
 Message: "${content.substring(0, 500)}"
 
-UN SEUL MOT: IMAGES, VIDEOS, COMMANDES, INFOS_PERSONNELLES, INAPPROPRIE, LIENS, FICHIERS ou CONVERSATIONS`;
+ONE WORD ONLY: IMAGES, VIDEOS, COMMANDES, INFOS_PERSONNELLES, INAPPROPRIE, LIENS, FICHIERS or CONVERSATIONS`;
 
         const postData = JSON.stringify({
             model: "openai",
@@ -211,17 +203,13 @@ UN SEUL MOT: IMAGES, VIDEOS, COMMANDES, INFOS_PERSONNELLES, INAPPROPRIE, LIENS, 
     });
 }
 
-// Catégoriser un message avec IA (async) - même logique que MessageCollector
 async function categorizeMessageAsync(content: string, attachments: string[], useAI: boolean): Promise<string> {
-    // Déterminer la catégorie
     let category = detectCategoryLocal(content, attachments);
     
-    // Si pas de catégorie évidente et IA activée, utiliser l'IA
     if (!category && useAI && content && content.trim().length > 0) {
         category = await classifyWithAI(content);
     }
     
-    // Catégorie par défaut
     if (!category) {
         category = CATEGORIES.CONVERSATIONS;
     }
@@ -229,7 +217,6 @@ async function categorizeMessageAsync(content: string, attachments: string[], us
     return category;
 }
 
-// Fonction pour sauvegarder un message individuel (même structure que MessageCollector)
 async function saveMessageIndividual(
     accountName: string,
     serverName: string,
@@ -242,20 +229,16 @@ async function saveMessageIndividual(
     useAI: boolean
 ): Promise<{ success: boolean; category?: string; error?: string }> {
     try {
-        // Déterminer la catégorie
         let category = detectCategoryLocal(content, attachments);
         
-        // Si pas de catégorie évidente et IA activée, utiliser l'IA
         if (!category && useAI && content && content.trim().length > 0) {
             category = await categorizeMessageAsync(content, attachments, useAI);
         }
         
-        // Catégorie par défaut
         if (!category) {
             category = CATEGORIES.CONVERSATIONS;
         }
 
-        // Structure: Compte > Auteur > Serveur > Catégorie (comme MessageCollector)
         const accountPath = path.join(BASE_PATH, sanitize(accountName));
         const authorPath = path.join(accountPath, sanitize(authorName));
         const serverPath = path.join(authorPath, sanitize(serverName));
@@ -270,7 +253,7 @@ async function saveMessageIndividual(
         let fileContent = "Date: " + timestamp + "\n";
         fileContent += "Channel: " + channelName + "\n";
         fileContent += "Message ID: " + messageId + "\n";
-        fileContent += "Catégorie: " + category + "\n";
+        fileContent += "Category: " + category + "\n";
         fileContent += "---\n\n";
         fileContent += content || "[empty]";
         
@@ -283,20 +266,18 @@ async function saveMessageIndividual(
         
         fs.writeFileSync(filePath, fileContent, "utf8");
         
-        // === DOSSIER PAR CATÉGORIE UNIQUEMENT ===
         const globalCategoryPath = path.join(accountPath, "_Par_Categorie", sanitize(category));
         ensureDir(globalCategoryPath);
         
-        // Fichier individuel dans le dossier catégorie globale
         const globalCategoryFileName = getTimestamp() + "_" + sanitize(authorName) + "_" + sanitize(serverName) + "_" + preview + ".txt";
         const globalCategoryFilePath = path.join(globalCategoryPath, globalCategoryFileName);
         
         let globalFileContent = "Date: " + timestamp + "\n";
-        globalFileContent += "Auteur: " + authorName + "\n";
-        globalFileContent += "Serveur: " + serverName + "\n";
+        globalFileContent += "Author: " + authorName + "\n";
+        globalFileContent += "Server: " + serverName + "\n";
         globalFileContent += "Channel: " + channelName + "\n";
         globalFileContent += "Message ID: " + messageId + "\n";
-        globalFileContent += "Catégorie: " + category + "\n";
+        globalFileContent += "Category: " + category + "\n";
         globalFileContent += "---\n\n";
         globalFileContent += content || "[empty]";
         
@@ -315,7 +296,6 @@ async function saveMessageIndividual(
     }
 }
 
-// Fonction pour sauvegarder un channel individuel de manière incrémentale
 export async function saveChannelToGuildDump(
     _: IpcMainInvokeEvent,
     accountName: string,
@@ -336,11 +316,9 @@ export async function saveChannelToGuildDump(
     try {
         ensureDir(BASE_PATH);
         
-        // Stats par catégorie pour ce channel
         const categoryStats: { [key: string]: number } = {};
         Object.values(CATEGORIES).forEach(cat => { categoryStats[cat] = 0; });
         
-        // Sauvegarder chaque message individuellement
         for (const msg of messages) {
             const result = await saveMessageIndividual(
                 accountName,
@@ -365,7 +343,6 @@ export async function saveChannelToGuildDump(
     }
 }
 
-// Fonction pour finaliser le résumé du serveur après tous les channels (optionnel, car structure différente maintenant)
 export function finalizeGuildDumpSummary(
     _: IpcMainInvokeEvent,
     guildName: string,
@@ -377,8 +354,6 @@ export function finalizeGuildDumpSummary(
     totalMessages: number,
     categoryStats: { [key: string]: number }
 ): { success: boolean; error?: string } {
-    // Plus besoin de résumé car la structure est maintenant comme MessageCollector
-    // Les messages sont déjà sauvegardés individuellement
     return { success: true };
 }
 
@@ -411,19 +386,15 @@ export async function saveGuildDump(
         const serverPath = path.join(datePath, sanitize(guildName) + "_" + guildId);
         ensureDir(serverPath);
         
-        // Dossier pour les fichiers par channel
         const byChannelPath = path.join(serverPath, "_Par_Channel");
         ensureDir(byChannelPath);
         
-        // Dossier pour les fichiers par catégorie
         const byCategoryPath = path.join(serverPath, "_Par_Categorie");
         ensureDir(byCategoryPath);
         
-        // Stats par catégorie
         const categoryStats: { [key: string]: number } = {};
         Object.values(CATEGORIES).forEach(cat => { categoryStats[cat] = 0; });
         
-        // Messages groupés par catégorie pour ce serveur
         const messagesByCategory: { [key: string]: Array<{
             channelName: string;
             author: string;
@@ -435,7 +406,6 @@ export async function saveGuildDump(
         }> } = {};
         Object.values(CATEGORIES).forEach(cat => { messagesByCategory[cat] = []; });
         
-        // Traiter chaque channel
         for (const channelData of channelsData) {
             const channelFileName = sanitize(channelData.channelName) + "_" + channelData.messages.length + "msgs.txt";
             const channelFilePath = path.join(byChannelPath, channelFileName);
@@ -444,19 +414,16 @@ export async function saveGuildDump(
             fileContent += "CHANNEL: #" + channelData.channelName + "\n";
             fileContent += "Channel ID: " + channelData.channelId + "\n";
             fileContent += "Server: " + guildName + "\n";
-            fileContent += "Date du dump: " + new Date().toLocaleString() + "\n";
-            fileContent += "Nombre de messages: " + channelData.messages.length + "\n";
+            fileContent += "Dump date: " + new Date().toLocaleString() + "\n";
+            fileContent += "Message count: " + channelData.messages.length + "\n";
             fileContent += "=".repeat(60) + "\n\n";
             
-            // Messages du plus ancien au plus récent
             const sortedMessages = [...channelData.messages].reverse();
             
             for (const msg of sortedMessages) {
-                // Catégoriser le message (sync pour la rapidité)
-                const category = categorizeMessageSync(msg.content, msg.attachments);
+                const category = detectCategoryLocal(msg.content, msg.attachments) || CATEGORIES.CONVERSATIONS;
                 categoryStats[category]++;
                 
-                // Ajouter aux messages par catégorie
                 messagesByCategory[category].push({
                     channelName: channelData.channelName,
                     ...msg
@@ -476,7 +443,6 @@ export async function saveGuildDump(
             fs.writeFileSync(channelFilePath, fileContent, "utf8");
         }
         
-        // Créer les fichiers par catégorie
         for (const [category, messages] of Object.entries(messagesByCategory)) {
             if (messages.length === 0) continue;
             
@@ -487,10 +453,10 @@ export async function saveGuildDump(
             const categoryFilePath = path.join(categoryPath, categoryFileName);
             
             let catContent = "=".repeat(60) + "\n";
-            catContent += "CATÉGORIE: " + category + "\n";
+            catContent += "CATEGORY: " + category + "\n";
             catContent += "Server: " + guildName + "\n";
-            catContent += "Date du dump: " + new Date().toLocaleString() + "\n";
-            catContent += "Nombre de messages: " + messages.length + "\n";
+            catContent += "Dump date: " + new Date().toLocaleString() + "\n";
+            catContent += "Message count: " + messages.length + "\n";
             catContent += "=".repeat(60) + "\n\n";
             
             for (const msg of messages) {
@@ -508,7 +474,6 @@ export async function saveGuildDump(
             fs.writeFileSync(categoryFilePath, catContent, "utf8");
         }
         
-        // Créer un fichier résumé pour le serveur
         const summaryPath = path.join(serverPath, "_SUMMARY.txt");
         let summaryContent = "=".repeat(60) + "\n";
         summaryContent += "SERVER DUMP SUMMARY\n";
@@ -520,7 +485,7 @@ export async function saveGuildDump(
         summaryContent += "Total messages: " + totalMessages + "\n";
         summaryContent += "=".repeat(60) + "\n\n";
         
-        summaryContent += "📊 STATISTIQUES PAR CATÉGORIE:\n";
+        summaryContent += "📊 STATISTICS BY CATEGORY:\n";
         const icons: { [key: string]: string } = {
             "Images": "🖼️",
             "Videos": "🎬",

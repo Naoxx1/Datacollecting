@@ -11,10 +11,8 @@ let isDumping = false;
 let shouldStop = false;
 let pluginSettings: any = null;
 
-// Stats globales par catégorie
 let globalCategoryStats: { [key: string]: number } = {};
 
-// Pour le calcul du temps estimé
 let startTime = 0;
 let channelsProcessedTotal = 0;
 let totalChannelsToProcess = 0;
@@ -92,7 +90,7 @@ function formatDuration(seconds: number): string {
 }
 
 function calculateEstimatedTime(): string {
-    if (channelsProcessedTotal === 0) return "Calcul...";
+    if (channelsProcessedTotal === 0) return "Calculating...";
     
     const elapsed = (Date.now() - startTime) / 1000;
     const avgTimePerChannel = elapsed / channelsProcessedTotal;
@@ -129,7 +127,7 @@ async function fetchMessagesFromChannel(channelId: string, token: string, maxMes
                 if (response.status === 429) {
                     const retryAfter = response.headers.get("Retry-After") || "5";
                     const waitTime = parseInt(retryAfter);
-                    showToast(`⏳ Rate limit - Pause ${waitTime}s...`, Toasts.Type.MESSAGE);
+                    showToast(`⏳ Rate limit - Waiting ${waitTime}s...`, Toasts.Type.MESSAGE);
                     logger.info(`Rate limit, waiting ${retryAfter}s...`);
                     await new Promise(resolve => setTimeout(resolve, waitTime * 1000 + 500));
                     continue;
@@ -150,7 +148,6 @@ async function fetchMessagesFromChannel(channelId: string, token: string, maxMes
             lastMessageId = batch[batch.length - 1].id;
             batchCount++;
             
-            // Notification tous les 500 messages dans un channel
             if (messages.length % 500 === 0) {
                 showToast(`📨 #${progress.currentChannelName}: ${messages.length} msgs...`, Toasts.Type.MESSAGE);
             }
@@ -212,7 +209,7 @@ function getAllGuilds(): Guild[] {
 
 async function dumpAllServers(): Promise<string> {
     if (isDumping) {
-        return "⏳ Un dump est déjà en cours... Utilise /dump-stop pour l'arrêter.";
+        return "⏳ A dump is already in progress... Use /dump-stop to stop it.";
     }
     
     isDumping = true;
@@ -224,18 +221,17 @@ async function dumpAllServers(): Promise<string> {
     const token = getToken();
     if (!token) {
         isDumping = false;
-        return "❌ Impossible de récupérer le token d'authentification.";
+        return "❌ Unable to retrieve authentication token.";
     }
     
     const guilds = getAllGuilds();
     if (guilds.length === 0) {
         isDumping = false;
-        return "❌ Aucun serveur trouvé.";
+        return "❌ No servers found.";
     }
     
     const useAI = pluginSettings?.store?.useAI ?? false;
     
-    // Calculer le nombre total de channels
     totalChannelsToProcess = 0;
     for (const guild of guilds) {
         totalChannelsToProcess += getTextChannels(guild.id).length;
@@ -250,10 +246,10 @@ async function dumpAllServers(): Promise<string> {
         currentChannelName: "",
         totalMessages: 0,
         percentComplete: 0,
-        estimatedTimeLeft: "Calcul..."
+        estimatedTimeLeft: "Calculating..."
     };
     
-    showToast(`🚀 Dump de ${guilds.length} serveurs (${totalChannelsToProcess} channels)...`, Toasts.Type.MESSAGE);
+    showToast(`🚀 Dumping ${guilds.length} servers (${totalChannelsToProcess} channels)...`, Toasts.Type.MESSAGE);
     
     let totalMessagesCollected = 0;
     let serversProcessed = 0;
@@ -261,7 +257,7 @@ async function dumpAllServers(): Promise<string> {
     try {
         for (const guild of guilds) {
             if (shouldStop) {
-                showToast("⏹️ Dump arrêté par l'utilisateur", Toasts.Type.MESSAGE);
+                showToast("⏹️ Dump stopped by user", Toasts.Type.MESSAGE);
                 break;
             }
             
@@ -274,7 +270,6 @@ async function dumpAllServers(): Promise<string> {
             
             updateProgress();
             
-            // Notification avec pourcentage et temps estimé
             showToast(
                 `📥 [${progress.currentGuild}/${progress.totalGuilds}] ${guild.name} | ${progress.percentComplete}% | ⏱️ ${progress.estimatedTimeLeft}`,
                 Toasts.Type.MESSAGE
@@ -287,7 +282,6 @@ async function dumpAllServers(): Promise<string> {
                 continue;
             }
             
-            // Stats de catégories pour ce serveur
             const guildCategoryStats: { [key: string]: number } = {};
             const channelsInfo: Array<{ channelName: string; messageCount: number }> = [];
             let totalMsgsInGuild = 0;
@@ -298,7 +292,6 @@ async function dumpAllServers(): Promise<string> {
                 progress.currentChannel++;
                 progress.currentChannelName = channel.name;
                 
-                // Notification pour chaque channel
                 showToast(
                     `📺 #${channel.name} (${progress.currentChannel}/${progress.totalChannels}) | 💬 ${progress.totalMessages} msgs`,
                     Toasts.Type.MESSAGE
@@ -309,7 +302,6 @@ async function dumpAllServers(): Promise<string> {
                 const messages = await fetchMessagesFromChannel(channel.id, token);
                 
                 if (messages.length > 0) {
-                    // Récupérer le nom du compte actuel
                     const currentUser = UserStore.getCurrentUser();
                     const accountName = currentUser?.username || "Unknown";
                     
@@ -333,8 +325,7 @@ async function dumpAllServers(): Promise<string> {
                     totalMsgsInGuild += messages.length;
                     progress.totalMessages = totalMessagesCollected;
                     
-                    // Sauvegarder immédiatement le channel (chaque message individuellement)
-                    showToast(`💾 Sauvegarde de #${channel.name} (${messages.length} msgs)...`, Toasts.Type.MESSAGE);
+                    showToast(`💾 Saving #${channel.name} (${messages.length} msgs)...`, Toasts.Type.MESSAGE);
                     
                     const result = await Native.saveChannelToGuildDump(
                         accountName,
@@ -346,7 +337,6 @@ async function dumpAllServers(): Promise<string> {
                         useAI
                     );
                     
-                    // Agréger les stats de catégories
                     if (result.categoryStats) {
                         for (const [cat, count] of Object.entries(result.categoryStats)) {
                             guildCategoryStats[cat] = (guildCategoryStats[cat] || 0) + count;
@@ -359,9 +349,8 @@ async function dumpAllServers(): Promise<string> {
                         messageCount: messages.length
                     });
                     
-                    // Notification si beaucoup de messages dans ce channel
                     if (messages.length > 1000) {
-                        showToast(`✅ #${channel.name}: ${messages.length} messages sauvegardés!`, Toasts.Type.SUCCESS);
+                        showToast(`✅ #${channel.name}: ${messages.length} messages saved!`, Toasts.Type.SUCCESS);
                     }
                 }
                 
@@ -371,9 +360,8 @@ async function dumpAllServers(): Promise<string> {
                 await new Promise(resolve => setTimeout(resolve, 200));
             }
             
-            // Finaliser le résumé du serveur
             if (channelsInfo.length > 0) {
-                showToast(`📝 Finalisation du résumé de ${guild.name}...`, Toasts.Type.MESSAGE);
+                showToast(`📝 Finalizing summary for ${guild.name}...`, Toasts.Type.MESSAGE);
                 
                 await Native.finalizeGuildDumpSummary(
                     guild.name,
@@ -385,7 +373,7 @@ async function dumpAllServers(): Promise<string> {
                 
                 serversProcessed++;
                 
-                showToast(`✅ ${guild.name} terminé! | ${progress.percentComplete}% global`, Toasts.Type.SUCCESS);
+                showToast(`✅ ${guild.name} completed! | ${progress.percentComplete}% global`, Toasts.Type.SUCCESS);
             }
             
             await new Promise(resolve => setTimeout(resolve, 500));
@@ -396,7 +384,6 @@ async function dumpAllServers(): Promise<string> {
         
         isDumping = false;
         
-        // Construire le résumé des catégories
         let categoryReport = "";
         const icons: { [key: string]: string } = {
             "Images": "🖼️",
@@ -416,30 +403,30 @@ async function dumpAllServers(): Promise<string> {
         }
         
         if (shouldStop) {
-            return `⏹️ **Dump arrêté!**\n\n📊 **Statistiques:**\n• Messages: ${totalMessagesCollected}\n• Serveurs: ${serversProcessed}/${guilds.length}\n• Channels: ${channelsProcessedTotal}/${totalChannelsToProcess}\n• Durée: ${durationStr}\n\n📑 **Par catégorie:**\n${categoryReport}`;
+            return `⏹️ **Dump stopped!**\n\n📊 **Statistics:**\n• Messages: ${totalMessagesCollected}\n• Servers: ${serversProcessed}/${guilds.length}\n• Channels: ${channelsProcessedTotal}/${totalChannelsToProcess}\n• Duration: ${durationStr}\n\n📑 **By category:**\n${categoryReport}`;
         }
         
-        showToast(`🎉 Dump terminé! ${totalMessagesCollected} messages en ${durationStr}`, Toasts.Type.SUCCESS);
+        showToast(`🎉 Dump completed! ${totalMessagesCollected} messages in ${durationStr}`, Toasts.Type.SUCCESS);
         await Native.openFolder();
         
-        return `✅ **Dump complet terminé!**\n\n📊 **Statistiques:**\n• Serveurs: ${serversProcessed}/${guilds.length}\n• Channels: ${channelsProcessedTotal}\n• Messages: ${totalMessagesCollected}\n• Durée: ${durationStr}\n\n📑 **Par catégorie:**\n${categoryReport}\n📁 Sauvegardé dans C:\\DiscordServerDumps`;
+        return `✅ **Dump completed!**\n\n📊 **Statistics:**\n• Servers: ${serversProcessed}/${guilds.length}\n• Channels: ${channelsProcessedTotal}\n• Messages: ${totalMessagesCollected}\n• Duration: ${durationStr}\n\n📑 **By category:**\n${categoryReport}\n📁 Saved in C:\\DiscordServerDumps`;
         
     } catch (error) {
         logger.error("Dump error:", error);
         isDumping = false;
-        return `❌ Erreur lors du dump: ${error}`;
+        return `❌ Error during dump: ${error}`;
     }
 }
 
 export default definePlugin({
     name: "ServerDumper",
-    description: "Télécharge TOUS les messages de TOUS les serveurs avec catégorisation automatique (Images, Vidéos, Liens, etc.)",
+    description: "Downloads ALL messages from ALL servers with automatic categorization (Images, Videos, Links, etc.)",
     authors: [Devs.Ven],
     
     options: {
         useAI: {
             type: OptionType.BOOLEAN,
-            description: "Utiliser l'IA pour classifier les messages ambigus (Pollinations API) - Plus lent mais plus précis",
+            description: "Use AI to classify ambiguous messages (Pollinations API) - Slower but more accurate",
             default: false
         }
     },
@@ -447,7 +434,7 @@ export default definePlugin({
     commands: [
         {
             name: "dump-all-servers",
-            description: "Télécharger tous les messages de tous les serveurs avec catégorisation (⚠️ très long)",
+            description: "Download all messages from all servers with categorization (⚠️ very long)",
             execute: async () => {
                 const result = await dumpAllServers();
                 return {
@@ -458,29 +445,29 @@ export default definePlugin({
         },
         {
             name: "dump-stop",
-            description: "Arrêter le dump en cours",
+            description: "Stop the current dump",
             execute: () => {
                 if (!isDumping) {
                     return {
                         send: false,
-                        result: "ℹ️ Aucun dump en cours."
+                        result: "ℹ️ No dump in progress."
                     };
                 }
                 shouldStop = true;
                 return {
                     send: false,
-                    result: "⏹️ Arrêt du dump demandé... Le dump s'arrêtera après le channel en cours."
+                    result: "⏹️ Stop requested... The dump will stop after the current channel."
                 };
             }
         },
         {
             name: "dump-progress",
-            description: "Afficher la progression détaillée du dump",
+            description: "Show detailed dump progress",
             execute: () => {
                 if (!isDumping) {
                     return {
                         send: false,
-                        result: "ℹ️ Aucun dump en cours."
+                        result: "ℹ️ No dump in progress."
                     };
                 }
                 
@@ -488,17 +475,17 @@ export default definePlugin({
                 
                 const elapsed = formatDuration((Date.now() - startTime) / 1000);
                 
-                let result = "📊 **Progression du dump:**\n\n";
-                result += `📈 **${progress.percentComplete}%** complété\n`;
-                result += `⏱️ Temps écoulé: ${elapsed}\n`;
-                result += `⏳ Temps restant estimé: ${progress.estimatedTimeLeft}\n\n`;
-                result += `🏠 Serveur: **${progress.currentGuild}/${progress.totalGuilds}** - ${progress.currentGuildName}\n`;
+                let result = "📊 **Dump Progress:**\n\n";
+                result += `📈 **${progress.percentComplete}%** completed\n`;
+                result += `⏱️ Elapsed time: ${elapsed}\n`;
+                result += `⏳ Estimated time remaining: ${progress.estimatedTimeLeft}\n\n`;
+                result += `🏠 Server: **${progress.currentGuild}/${progress.totalGuilds}** - ${progress.currentGuildName}\n`;
                 result += `📺 Channel: **${progress.currentChannel}/${progress.totalChannels}** - #${progress.currentChannelName}\n`;
-                result += `📺 Channels total: **${channelsProcessedTotal}/${totalChannelsToProcess}**\n`;
-                result += `💬 Messages collectés: **${progress.totalMessages}**\n\n`;
+                result += `📺 Total channels: **${channelsProcessedTotal}/${totalChannelsToProcess}**\n`;
+                result += `💬 Messages collected: **${progress.totalMessages}**\n\n`;
                 
                 if (Object.keys(globalCategoryStats).length > 0) {
-                    result += "📑 **Par catégorie:**\n";
+                    result += "📑 **By category:**\n";
                     const icons: { [key: string]: string } = {
                         "Images": "🖼️",
                         "Videos": "🎬",
@@ -524,22 +511,22 @@ export default definePlugin({
         },
         {
             name: "dump-servers-open",
-            description: "Ouvrir le dossier des dumps serveurs",
+            description: "Open the server dumps folder",
             execute: async () => {
                 await Native.openFolder();
                 return {
                     send: false,
-                    result: "📂 Ouverture de C:\\DiscordServerDumps"
+                    result: "📂 Opening C:\\DiscordServerDumps"
                 };
             }
         },
         {
             name: "dump-servers-list",
-            description: "Lister tous les serveurs disponibles",
+            description: "List all available servers",
             execute: () => {
                 const guilds = getAllGuilds();
                 let totalChannels = 0;
-                let result = `📋 **${guilds.length} serveurs trouvés:**\n\n`;
+                let result = `📋 **${guilds.length} servers found:**\n\n`;
                 
                 guilds.forEach((guild, index) => {
                     const channels = getTextChannels(guild.id);
@@ -547,7 +534,7 @@ export default definePlugin({
                     result += `${index + 1}. **${guild.name}** (${channels.length} channels)\n`;
                 });
                 
-                result += `\n📊 **Total: ${totalChannels} channels à dumper**`;
+                result += `\n📊 **Total: ${totalChannels} channels to dump**`;
                 
                 return {
                     send: false,
@@ -557,10 +544,10 @@ export default definePlugin({
         },
         {
             name: "dump-categories",
-            description: "Afficher les catégories disponibles",
+            description: "Show available categories",
             execute: async () => {
                 const cats = await Native.getCategories();
-                let result = "📑 **Catégories de tri:**\n\n";
+                let result = "📑 **Sorting categories:**\n\n";
                 const icons: { [key: string]: string } = {
                     "Images": "🖼️",
                     "Videos": "🎬",
@@ -575,7 +562,7 @@ export default definePlugin({
                     result += `${icons[cat] || "•"} **${cat}**\n`;
                 });
                 
-                result += "\n💡 Les messages sont automatiquement triés dans ces catégories!";
+                result += "\n💡 Messages are automatically sorted into these categories!";
                 
                 return {
                     send: false,
@@ -585,7 +572,7 @@ export default definePlugin({
         },
         {
             name: "dump-servers-test",
-            description: "Tester si le plugin fonctionne",
+            description: "Test if the plugin works",
             execute: async () => {
                 try {
                     const initResult = await Native.initFolder();
@@ -599,33 +586,32 @@ export default definePlugin({
                         totalChannels += getTextChannels(g.id).length;
                     });
                     
-                    // Estimation du temps (environ 3-5 secondes par channel en moyenne)
                     const estimatedMinutes = Math.round((totalChannels * 4) / 60);
                     const estimatedTime = estimatedMinutes > 60 
                         ? `${Math.floor(estimatedMinutes / 60)}h ${estimatedMinutes % 60}m`
                         : `${estimatedMinutes}m`;
                     
-                    let result = "🔍 **Test ServerDumper**\n\n";
-                    result += `📁 Dossier: ${initResult.success ? "✅ OK" : "❌ ERREUR"}\n`;
+                    let result = "🔍 **ServerDumper Test**\n\n";
+                    result += `📁 Folder: ${initResult.success ? "✅ OK" : "❌ ERROR"}\n`;
                     result += `📁 Path: ${initResult.path}\n`;
-                    result += `🔑 Token: ${tokenOk ? "✅ OK" : "❌ ERREUR"}\n`;
-                    result += `🏠 Serveurs: **${guilds.length}**\n`;
+                    result += `🔑 Token: ${tokenOk ? "✅ OK" : "❌ ERROR"}\n`;
+                    result += `🏠 Servers: **${guilds.length}**\n`;
                     result += `📺 Total channels: **${totalChannels}**\n`;
-                    result += `🤖 IA activée: ${useAI ? "✅ Oui" : "❌ Non"}\n`;
-                    result += `⏱️ Temps estimé: **~${estimatedTime}**\n`;
+                    result += `🤖 AI enabled: ${useAI ? "✅ Yes" : "❌ No"}\n`;
+                    result += `⏱️ Estimated time: **~${estimatedTime}**\n`;
                     
                     if (tokenOk && guilds.length > 0) {
-                        result += "\n✅ **Tout est OK!** Tu peux utiliser /dump-all-servers";
-                        result += "\n\n📑 Les messages seront triés par catégorie automatiquement.";
-                        result += "\n📊 Utilise /dump-progress pour suivre l'avancement!";
+                        result += "\n✅ **Everything is OK!** You can use /dump-all-servers";
+                        result += "\n\n📑 Messages will be automatically sorted by category.";
+                        result += "\n📊 Use /dump-progress to track progress!";
                     } else {
-                        result += "\n❌ **Problème détecté** - Vérifie les erreurs ci-dessus";
+                        result += "\n❌ **Problem detected** - Check the errors above";
                     }
                     
-                    showToast("Test terminé", Toasts.Type.SUCCESS);
+                    showToast("Test completed", Toasts.Type.SUCCESS);
                     return { send: false, result: result };
                 } catch (error) {
-                    return { send: false, result: "❌ Erreur: " + error };
+                    return { send: false, result: "❌ Error: " + error };
                 }
             }
         }
